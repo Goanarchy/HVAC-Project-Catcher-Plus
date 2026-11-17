@@ -1,4 +1,4 @@
-# HVAC Project Catcher Plus 1.2
+# HVAC Project Catcher Plus 1.3
 
 [![Live Web App](https://img.shields.io/badge/Live%20Web%20App-Open%20App-0F2C59?style=for-the-badge)](https://goanarchy.github.io/HVAC-Project-Catcher-Plus/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -13,9 +13,9 @@
 
 **Demo en vivo / Live demo:** https://goanarchy.github.io/HVAC-Project-Catcher-Plus/
 
-**HVAC Project Catcher Plus 1.2** es una aplicación web local (HTML/CSS/JS vanilla, sin build) para pequeñas empresas HVAC en **New Jersey**. Ayuda a crear cotizaciones y propuestas profesionales por etapas, evitar olvidos con un checklist, comparar proveedores, generar PDF para el cliente y listas/RFQ para proveedores.
+**HVAC Project Catcher Plus 1.3** es una aplicación web local (HTML/CSS/JS vanilla, sin build) para pequeñas empresas HVAC en **New Jersey**. Ayuda a crear cotizaciones y propuestas profesionales por etapas, evitar olvidos con un checklist, comparar proveedores, generar PDF para el cliente y listas/RFQ para proveedores.
 
-- **Nombre:** HVAC Project Catcher Plus **v1.2**
+- **Nombre:** HVAC Project Catcher Plus **v1.3**
 - **Plataforma:** abre con `start.bat` (Edge/Chrome en modo app) o `index.html`.
 - **Interfaz:** bilingüe (**Español / English**) con cambio de idioma; **modo noche por defecto** con toggle claro/oscuro.
 - **Datos:** guardados localmente en `localStorage` del navegador (clave `pcp_state_v1_v1`) en esta PC/perfil.
@@ -215,7 +215,7 @@ node --check js/app.js
 ## Documentación
 
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — arquitectura, modelo de estado y flujos.
-- [RELEASE_NOTES.md](./RELEASE_NOTES.md) — cambios de la versión 1.2.
+- [RELEASE_NOTES.md](./RELEASE_NOTES.md) — cambios de la versión 1.3.
 - [NEXT_VERSION_ROADMAP.md](./NEXT_VERSION_ROADMAP.md) — mejoras planificadas.
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — detalle técnico.
 - [docs/QA_CHECKLIST.md](./docs/QA_CHECKLIST.md) — lista de verificación.
@@ -229,4 +229,4 @@ MIT © 2026 Goanarchy. Ver [`LICENSE`](./LICENSE).
 
 ---
 
-*HVAC Project Catcher Plus 1.2 — herramienta de estimación interna. Los precios del catálogo son referencias y deben confirmarse con cotización real del proveedor/sucursal antes de enviar la oferta. Verifique licencias, seguros, impuestos y requisitos locales con profesionales correspondientes. No afiliado a proveedores ni marcas mencionadas.*
+*HVAC Project Catcher Plus 1.3 — herramienta de estimación interna. Los precios del catálogo son referencias y deben confirmarse con cotización real del proveedor/sucursal antes de enviar la oferta. Verifique licencias, seguros, impuestos y requisitos locales con profesionales correspondientes. No afiliado a proveedores ni marcas mencionadas.*

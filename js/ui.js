@@ -196,7 +196,7 @@ window.PCP = window.PCP || {};
     $('#modal-foot').innerHTML = footHtml || '';
     var bd = $('#modal-backdrop');
     bd.classList.remove('hidden');
-    bd.querySelector('.modal').className = 'modal' + (opts.small ? ' sm' : '');
+    bd.querySelector('.modal').className = 'modal' + (opts.small ? ' sm' : '') + (opts.className ? ' ' + opts.className : '');
   }
   function closeModal() { $('#modal-backdrop').classList.add('hidden'); }
 
@@ -306,12 +306,17 @@ window.PCP = window.PCP || {};
   ];
 
   function getSteps(p) {
-    var hasMaint = !!(p && p.scope && p.scope.indexOf('maint') >= 0);
+    var scopes = (p && p.scope) || [];
+    var hasMaint = scopes.indexOf('maint') >= 0;
+    var maintOnly = S.isMaintOnly ? S.isMaintOnly(p) : (scopes.length === 1 && scopes[0] === 'maint');
+    var maintStep = { id: 'maintenance', titleEs: 'Mantenimiento', titleEn: 'Maintenance', subEs: 'Equipos, visitas y presupuesto', subEn: 'Equipment, visits & budget' };
     var list = BASE_STEPS.slice();
-    if (hasMaint) {
-      // insert maintenance before summary
+    if (maintOnly) {
+      // Maintenance-only projects: Scope → Maintenance → Summary.
+      list = [BASE_STEPS[0], maintStep, BASE_STEPS[BASE_STEPS.length - 1]];
+    } else if (hasMaint) {
       var idx = list.map(function(s){return s.id;}).indexOf('summary');
-      list.splice(idx, 0, { id: 'maintenance', titleEs: 'Mantenimiento', titleEn: 'Maintenance', subEs: 'Equipos, visitas y presupuesto', subEn: 'Equipment, visits & budget' });
+      list.splice(idx, 0, maintStep);
     }
     return list.map(function(s, i){ var o = Object.assign({}, s); o.n = i + 1; return o; });
   }
@@ -386,6 +391,7 @@ window.PCP = window.PCP || {};
   function renderProject(pid, step) {
     var p = S.getProject(pid);
     if (!p) return shell('<div class="empty">' + (lang()==='en'?'Project not found.':'Proyecto no encontrado.') + '</div>', 'projects');
+    if (S.syncMaintenance) S.syncMaintenance(p);
     var steps = getSteps(p);
     step = Math.max(1, Math.min(steps.length, parseInt(step, 10) || 1));
     var c = S.calc(p), ch = S.checklist(p, c);
@@ -421,10 +427,13 @@ window.PCP = window.PCP || {};
         + '<div><div class="t">' + esc(LScope(s.id)) + '</div><div class="d">' + esc(LScopeD(s.id)) + '</div></div></label>';
     }).join('');
     var statusOpts = [['draft',LStatus('draft')],['sent',LStatus('sent')],['won',lang()==='en'?'Won':'Ganada'],['lost',LStatus('lost')]];
-    var nextN = 2;
+    var nextN = (steps && steps[1]) ? steps[1].n : 2;
+    var maintOnlyNow = S.isMaintOnly ? S.isMaintOnly(p) : false;
     return '<div class="split"><div>'
       + '<div class="card"><h3>🎯 1. ' + (lang()==='en'?'What does the project include?':'¿Qué conforma el proyecto?') + '</h3><p class="muted">' + (lang()==='en'?'Select all applicable systems. This drives the checklist so nothing is missed. If maintenance is included, a dedicated maintenance step will appear.':'Seleccione todos los sistemas que aplican. Esto activa el checklist para que no falte nada. Si incluye mantenimiento, aparecerá una etapa dedicada de mantenimiento.') + '</p>'
-      + '<div class="check-grid">' + scopes + '</div></div>'
+      + '<div class="check-grid">' + scopes + '</div>'
+      + (maintOnlyNow ? '<div class="notice info maint-only-note" style="margin-top:10px">🛠️ <b>' + (lang()==='en'?'Maintenance-only project:':'Proyecto solo de mantenimiento:') + '</b> ' + (lang()==='en'?'the wizard is simplified to Scope → Maintenance → Summary. No installation equipment, materials or labor are required.':'el asistente se simplifica a Alcance → Mantenimiento → Resumen. No se exigen equipos, materiales ni mano de obra de instalación.') + '</div>' : '')
+      + '</div>'
       + '<div class="card"><h3>📁 ' + (lang()==='en'?'Project & client':'Proyecto y cliente') + '</h3>'
       + '<div class="form-row">'
       + field('col-6', t('projectName') + ' *','<input type="text" data-bind="projectName" value="' + esc(p.projectName || '') + '" placeholder="' + esc(t('projectNamePh')) + '">')
@@ -451,7 +460,7 @@ window.PCP = window.PCP || {};
       + '<div class="form-row">' + field('col-4', lang()==='en'?'Date':'Fecha','<input type="date" data-bind="date" value="' + esc(p.date) + '">')
       + field('col-4', lang()==='en'?'Valid until':'Vigencia hasta','<input type="date" data-bind="validUntil" value="' + esc(p.validUntil) + '">')
       + field('col-4', t('colStatus'),'<select data-bind="status">' + statusOpts.map(function(s){return option(s[0],s[1],p.status);}).join('') + '</select>') + '</div></div>'
-      + '<div class="actions" style="justify-content:flex-end"><a class="btn primary" href="#/project/' + p.id + '/' + nextN + '">' + (lang()==='en'?'Next':'Siguiente') + ' →</a></div>'
+      + '<div class="actions" style="justify-content:flex-end"><a class="btn primary btn-next" href="#/project/' + p.id + '/' + nextN + '">' + (lang()==='en'?'Next':'Siguiente') + ' <span class="arrow">→</span></a></div>'
       + '</div>' + projectSidebar(p, c, ch) + '</div>';
   }
 
@@ -489,7 +498,7 @@ window.PCP = window.PCP || {};
       + '<div class="check-grid" style="margin-top:10px">' + list + '</div>'
       + compareNote
       + '</div>'
-      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/1">← ' + esc(t('previous')) + '</a><a class="btn primary" href="#/project/' + p.id + '/' + nextN + '">' + (lang()==='en'?'Next':'Siguiente') + ' →</a></div>'
+      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/1">← ' + esc(t('previous')) + '</a><a class="btn primary btn-next" href="#/project/' + p.id + '/' + nextN + '">' + (lang()==='en'?'Next':'Siguiente') + ' <span class="arrow">→</span></a></div>'
       + '</div>' + projectSidebar(p, c, ch) + '</div>';
   }
 
@@ -565,7 +574,7 @@ window.PCP = window.PCP || {};
       + '<div class="card"><div class="table-wrap"><table><thead><tr><th>' + (lang()==='en'?'Item / supplier / includes':'Ítem / proveedor / incluye') + '</th><th class="num">' + esc(t('colQty')) + '</th><th class="num">' + esc(t('colCost')) + '</th><th class="num">' + (lang()==='en'?'Sell':'P. venta') + '</th><th class="num">Ext.</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
       + '<div class="notice info" style="margin-top:10px">💡 <b>' + (lang()==='en'?'Tip:':'Consejo:') + '</b> ' + (lang()==='en'?'When entering a manual price, fill in <b>"what\'s included"</b> and the <b>price date</b>. Verify the live price with the supplier before sending the quote.':'Cuando ingreses un precio manual, completa <b>"qué incluye"</b> y la <b>fecha del precio</b>. Verifica el precio vigente con el proveedor antes de enviar la oferta.') + selInfo + '</div>'
       + sugHtml + '</div>'
-      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/' + prev + '">← ' + esc(t('previous')) + '</a><a class="btn primary" href="#/project/' + p.id + '/' + next + '">' + esc(t('next')) + ' →</a></div>'
+      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/' + prev + '">← ' + esc(t('previous')) + '</a><a class="btn primary btn-next" href="#/project/' + p.id + '/' + next + '">' + esc(t('next')) + ' <span class="arrow">→</span></a></div>'
       + '</div>' + projectSidebar(p, c, ch) + '</div>';
   }
 
@@ -602,41 +611,88 @@ window.PCP = window.PCP || {};
   function stepMaintenance(p, c, ch, steps) {
     steps = steps || getSteps(p);
     var en = lang()==='en';
-    p.maintenance = p.maintenance || { items: [], notes: '', contractMonths: 12, includeMaterials: true };
+    if (S.syncMaintenance) S.syncMaintenance(p);
+    p.maintenance = p.maintenance || { items: [], notes: '', contractMonths: 12, includeMaterials: true, dismissed: [] };
     if (!Array.isArray(p.maintenance.items)) p.maintenance.items = [];
+    if (!Array.isArray(p.maintenance.dismissed)) p.maintenance.dismissed = [];
     var items = p.maintenance.items;
+    var eqLines = (p.lines && p.lines.equipment) || [];
+    var maintOnly = S.isMaintOnly ? S.isMaintOnly(p) : false;
+    var autoCount = 0, manualCount = 0, coveredQty = 0;
+    items.forEach(function (m) {
+      if (m.sourceLineId) autoCount++; else manualCount++;
+      coveredQty += U.num(m.qty) || 0;
+    });
     var rows = items.length ? items.map(function(m, idx){
       var qty = U.num(m.qty)||0, visits = U.num(m.visits)||0, price = U.num(m.pricePerVisit)||0, mat = U.num(m.materialsPerVisit)||0;
       var lineSell = visits * (qty * price + mat);
+      var sourceBadge = m.sourceLineId
+        ? '<span class="maint-source from-quote" title="' + esc(en?'Loaded automatically from this quote':'Cargado automáticamente de esta oferta') + '">📦 ' + (en?'from quote':'de la oferta') + '</span>'
+        : '<span class="maint-source manual">✍️ ' + (en?'manual':'manual') + '</span>';
       return '<tr>'
-        + '<td><input type="text" data-maint-idx="'+idx+'" data-maint-field="type" value="'+esc(m.type||'')+'" placeholder="'+esc(en?'e.g. Split 3 ton / RTU':'Ej.: Split 3 ton / RTU')+'"></td>'
+        + '<td><input type="text" data-maint-idx="'+idx+'" data-maint-field="type" value="'+esc(m.type||'')+'" placeholder="'+esc(en?'e.g. Split 3 ton / RTU':'Ej.: Split 3 ton / RTU')+'">' + sourceBadge + '</td>'
         + '<td class="num"><input type="number" step="1" min="0" style="width:80px" data-maint-idx="'+idx+'" data-maint-field="qty" value="'+esc(m.qty==null?1:m.qty)+'"></td>'
         + '<td class="num"><input type="number" step="1" min="0" style="width:90px" data-maint-idx="'+idx+'" data-maint-field="visits" value="'+esc(m.visits==null?2:m.visits)+'" title="'+esc(en?'Visits per period/year':'Visitas por periodo/año')+'"></td>'
         + '<td class="num"><input type="number" step="0.01" min="0" style="width:110px" data-maint-idx="'+idx+'" data-maint-field="pricePerVisit" value="'+esc(m.pricePerVisit==null?'':m.pricePerVisit)+'" placeholder="0.00"></td>'
         + '<td class="num"><input type="number" step="0.01" min="0" style="width:110px" data-maint-idx="'+idx+'" data-maint-field="materialsPerVisit" value="'+esc(m.materialsPerVisit==null?'':m.materialsPerVisit)+'" placeholder="0.00"></td>'
         + '<td class="num"><b>'+money(lineSell)+'</b><div class="small muted">'+money(visits*mat)+' '+(en?'parts':'mat.')+'</div></td>'
-        + '<td class="num"><button class="btn sm danger" data-action="del-maint-item" data-idx="'+idx+'">🗑️</button></td>'
+        + '<td class="num"><button class="btn sm danger" data-action="del-maint-item" data-idx="'+idx+'" title="'+esc(en?'Remove line':'Quitar línea')+'">🗑️</button></td>'
         + '</tr>';
-    }).join('') : '<tr><td colspan="7"><div class="empty">🛠️ ' + (en?'No maintenance items yet. Add equipment/service lines to build the maintenance budget.':'Aún no hay ítems de mantenimiento. Agrega equipos/servicios para crear el presupuesto de mantenimiento.') + '</div></td></tr>';
+    }).join('') : '<tr><td colspan="7"><div class="empty maint-empty">🛠️ ' + (eqLines.length && autoCount === 0
+      ? (en?'All quoted equipment was removed from the plan. Use “Resync from quote” to load it again or add a manual line.':'Todos los equipos cotizados fueron quitados del plan. Usa “Sincronizar oferta” para cargarlos de nuevo o agrega una línea manual.')
+      : (maintOnly
+        ? (en?'This is a maintenance-only project. Add the equipment or service groups you will cover, then set visits and price per visit.':'Este proyecto es solo de mantenimiento. Agrega los equipos o grupos de servicio que cubrirás y define visitas y precio por visita.')
+        : (en?'No plan lines yet. Quote equipment in the Equipment step or add a manual service line.':'Aún no hay líneas del plan. Cotiza equipos en la etapa de Equipos o agrega una línea de servicio manual.'))) + '</div></td></tr>';
     var maintTotal = U.num(c.maintSell || 0);
     var maintMat = U.num(c.maintCost || 0);
     var stepN = 1; for (var si=0; si<steps.length; si++) if (steps[si].id === 'maintenance') { stepN = steps[si].n; break; }
     var prev = Math.max(1, stepN - 1), next = Math.min(steps.length, stepN + 1);
+    var presetLabels = {};
+    presetLabels[2] = en ? '2 · semiannual' : '2 · semestral';
+    presetLabels[4] = en ? '4 · quarterly' : '4 · trimestral';
+    presetLabels[12] = en ? '12 · monthly' : '12 · mensual';
+    var presets = [2,4,12].map(function(v){
+      return '<button class="btn sm" data-action="maint-visits" data-pid="' + esc(p.id) + '" data-visits="' + v + '">' + esc(presetLabels[v]) + '</button>';
+    }).join('');
+    function miniStat(label, value) {
+      return '<div class="maint-stat"><span class="k">' + esc(label) + '</span><span class="v">' + value + '</span></div>';
+    }
     return '<div class="split"><div>'
-      + '<div class="card"><div class="page-head" style="margin:0"><div><h3 style="margin:0">🛠️ ' + (en?'Maintenance plan & budget':'Plan y presupuesto de mantenimiento') + '</h3>'
-      + '<p class="muted">' + (en?'Define equipment count/type, visit frequency, price per equipment per visit, and materials/parts allowance to produce a clear maintenance budget.':'Define cantidad/tipo de equipos, frecuencia de visitas, precio por equipo por visita y monto de materiales/repuestos para generar un presupuesto de mantenimiento claro.') + '</p></div>'
-      + '<div class="actions"><button class="btn primary" data-action="add-maint-item" data-pid="'+esc(p.id)+'">➕ ' + (en?'Add equipment/line':'Agregar equipo/línea') + '</button></div></div>'
-      + '<div class="notice info" style="margin-top:10px">' + (en?'<b>How to use:</b> Add one line per equipment type or service group. <b>Visits</b> = visits per contract period (e.g. 2 for semiannual, 4 for quarterly). <b>Price per equipment/visit</b> = labor/service amount per unit per visit. <b>Materials/parts per visit</b> = allowance for filters, belts, chemicals, minor parts per visit (counted as direct cost).':'<b>Cómo usar:</b> Agrega una línea por tipo de equipo o grupo de servicio. <b>Visitas</b> = visitas por periodo/contrato (ej. 2 semestral, 4 trimestral). <b>Precio por equipo/visita</b> = monto de mano de obra/servicio por unidad por visita. <b>Materiales/repuestos por visita</b> = provisión para filtros, correas, químicos, repuestos menores por visita (se cuenta como costo directo).') + '</div></div>'
+      + '<div class="card maint-card"><div class="maint-hero">'
+      + '<div class="maint-hero-main"><div class="maint-hero-icon">🛠️</div><div>'
+      + '<div class="eyebrow">' + (maintOnly ? (en?'Maintenance-only plan':'Plan solo de mantenimiento') : (en?'Service plan':'Plan de servicio')) + '</div>'
+      + '<h3>' + (en?'Maintenance plan & budget':'Plan y presupuesto de mantenimiento') + '</h3>'
+      + '<p>' + (en?'Equipment coverage, visit frequency and price per visit in one place.':'Cobertura de equipos, frecuencia de visitas y precio por visita en un solo lugar.') + '</p>'
+      + '<div class="maint-chips">'
+      + '<span class="pill info">📦 ' + autoCount + ' ' + (en?'from quote':'de la oferta') + '</span>'
+      + '<span class="pill">' + (en?'Manual':'Manual') + ': ' + manualCount + '</span>'
+      + '<span class="pill ok">' + money(maintTotal) + '</span>'
+      + '</div></div></div>'
+      + '<div class="actions maint-hero-actions">'
+      + '<button class="btn soft" data-action="sync-maint" data-pid="' + esc(p.id) + '">🔄 ' + (en?'Resync from quote':'Sincronizar oferta') + '</button>'
+      + '<button class="btn primary" data-action="add-maint-item" data-pid="' + esc(p.id) + '">➕ ' + (en?'Add line':'Agregar línea') + '</button>'
+      + '</div></div>'
+      + '<div class="notice info maint-help" style="margin-top:12px">' + (autoCount
+        ? (en?'<b>Auto-loaded from the quote:</b> equipment and quantities follow the offer. Your visits, prices and materials are preserved when the quote changes.':'<b>Cargado desde la oferta:</b> los equipos y cantidades siguen la cotización. Tus visitas, precios y materiales se conservan cuando cambia la oferta.')
+        : (en?'Add equipment in the quote and it will appear here automatically, or create a manual line for a maintenance-only plan.':'Agrega equipos a la cotización y aparecerán aquí automáticamente, o crea una línea manual para un plan solo de mantenimiento.')) + '</div>'
+      + '<div class="maint-presets"><span class="small muted">' + (en?'Set all visits:':'Definir visitas de todas:') + '</span>' + presets + '</div>'
+      + '</div>'
       + '<div class="card"><h3>📋 ' + (en?'Maintenance lines':'Líneas de mantenimiento') + '</h3>'
-      + '<div class="table-wrap"><table><thead><tr><th>' + (en?'Equipment / service type':'Tipo de equipo / servicio') + '</th><th class="num">' + (en?'Qty':'Cant.') + '</th><th class="num">' + (en?'Visits':'Visitas') + '</th><th class="num">' + (en?'$/equip/visit':'$/equipo/visita') + '</th><th class="num">' + (en?'Materials/visit':'Materiales/visita') + '</th><th class="num">' + (en?'Line total':'Total línea') + '</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
+      + '<div class="table-wrap maint-table"><table><thead><tr><th>' + (en?'Equipment / service type':'Tipo de equipo / servicio') + '</th><th class="num">' + (en?'Qty':'Cant.') + '</th><th class="num">' + (en?'Visits':'Visitas') + '</th><th class="num">' + (en?'$/equip/visit':'$/equipo/visita') + '</th><th class="num">' + (en?'Materials/visit':'Materiales/visita') + '</th><th class="num">' + (en?'Line total':'Total línea') + '</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
       + '<div class="card"><h3>🧾 ' + (en?'Maintenance totals':'Totales de mantenimiento') + '</h3>'
+      + '<div class="maint-stats">'
+      + miniStat(en?'Equipment covered':'Equipos cubiertos', String(coveredQty))
+      + miniStat(en?'Plan lines':'Líneas del plan', String(items.length))
+      + miniStat(en?'Plan sell':'Venta del plan', '<b>' + money(maintTotal) + '</b>')
+      + miniStat(en?'Parts cost':'Costo materiales', money(maintMat))
+      + '</div>'
       + '<div class="form-row">'
       + field('col-4', en?'Contract period (months)':'Periodo de contrato (meses)','<input type="number" step="1" min="0" data-bind="maintenance.contractMonths" value="'+esc(p.maintenance.contractMonths==null?12:p.maintenance.contractMonths)+'">', en?'Common: 12 months. Use for clarity in the proposal.':'Común: 12 meses. Úsalo para claridad en la propuesta.')
       + field('col-8', en?'Maintenance notes / included tasks':'Notas de mantenimiento / tareas incluidas','<textarea class="textarea-lg" data-bind="maintenance.notes">'+esc(p.maintenance.notes||'')+'</textarea>', en?'E.g. inspection, coil cleaning, filter check/replacement (if included), refrigerant level check, electrical checks, drain cleaning, report.':'Ej.: inspección, limpieza de coil, revisión/cambio de filtros (si aplica), verificación de refrigerante, chequeos eléctricos, limpieza de drenaje, reporte.')
       + '</div>'
-      + '<div class="kv" style="max-width:420px;margin-top:8px"><span class="k">' + (en?'Maintenance sell total':'Total venta mantenimiento') + '</span><span class="v"><b>' + money(maintTotal) + '</b></span><span class="k">' + (en?'Materials/parts allowance (cost)':'Provisión materiales/repuestos (costo)') + '</span><span class="v">' + money(maintMat) + '</span></div>'
+      + '<div class="kv" style="max-width:460px;margin-top:8px"><span class="k">' + (en?'Maintenance sell total':'Total venta mantenimiento') + '</span><span class="v"><b>' + money(maintTotal) + '</b></span><span class="k">' + (en?'Materials/parts allowance (cost)':'Provisión materiales/repuestos (costo)') + '</span><span class="v">' + money(maintMat) + '</span></div>'
       + '<div class="notice info" style="margin-top:10px">' + (en?'This maintenance budget is included in project totals when scope includes maintenance. Review tax mode and commercial terms in Summary.':'Este presupuesto de mantenimiento se incluye en los totales del proyecto cuando el alcance incluye mantenimiento. Revisa el modo de impuesto y condiciones comerciales en Resumen.') + '</div></div>'
-      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/' + prev + '">← ' + esc(t('previous')) + '</a><a class="btn primary" href="#/project/' + p.id + '/' + next + '">' + esc(t('next')) + ' →</a></div>'
+      + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/' + prev + '">← ' + esc(t('previous')) + '</a><a class="btn primary btn-next" href="#/project/' + p.id + '/' + next + '">' + esc(t('next')) + ' <span class="arrow">→</span></a></div>'
       + '</div>' + projectSidebar(p, c, ch) + '</div>';
   }
 
@@ -703,7 +759,7 @@ window.PCP = window.PCP || {};
       + '<div class="card"><h3>✅ ' + (lang()==='en'?'Checklist & actions':'Checklist y acciones') + '</h3>' + issueHtml
       + '<div class="actions" style="margin-top:10px;flex-wrap:wrap">'
       + '<button class="btn" data-action="update-prices" data-id="' + p.id + '">💲 ' + esc(t('updatePrices')) + '</button>'
-      + '<button class="btn" data-action="open-rfq" data-id="' + p.id + '">📧 ' + (lang()==='en'?'Materials / RFQ':'Materiales / RFQ') + '</button>'
+      + (S.isMaintOnly && S.isMaintOnly(p) ? '' : '<button class="btn" data-action="open-rfq" data-id="' + p.id + '">📧 ' + (lang()==='en'?'Materials / RFQ':'Materiales / RFQ') + '</button>')
       + '<button class="btn primary" data-action="print-project" data-id="' + p.id + '">🖨️ ' + (lang()==='en'?'Client PDF / Print':'PDF cliente / Imprimir') + '</button>'
       + '</div><div class="notice info" style="margin-top:10px">' + (lang()==='en'?'The client PDF/proposal does not include a detailed materials list. It shows company info, scope/services, equipment & brands, delivery/payment/terms, and totals.':'El PDF/propuesta para el cliente no incluye listado detallado de materiales. Muestra empresa, alcance/servicios, equipos y marcas, entrega/pago/condiciones y totales.') + '</div></div>'
       + '<div class="actions" style="justify-content:space-between"><a class="btn" href="#/project/' + p.id + '/' + prevN + '">← ' + esc(t('previous')) + '</a><span class="muted small">' + (lang()==='en'?'Review before sending':'Revisa antes de enviar') + '</span></div>'
@@ -1101,6 +1157,7 @@ window.PCP = window.PCP || {};
     var scheduleRows = (p.schedule||[]).map(function(s){ var amt = c.total * (U.num(s.pct)/100); return '<tr><td>'+esc(s.label)+'</td><td style="text-align:right">'+esc(s.pct)+'%</td><td style="text-align:right">'+money(amt)+'</td></tr>'; }).join('');
 
     var hasMaint = (p.scope && p.scope.indexOf('maint') >= 0) && p.maintenance && Array.isArray(p.maintenance.items) && p.maintenance.items.length;
+    var maintOnly = S.isMaintOnly ? S.isMaintOnly(p) : false;
     var services = [];
     if ((p.lines.labor||[]).length) services.push(lang()==='en'?'Professional installation labor and technical services':'Mano de obra profesional de instalación y servicios técnicos');
     if ((p.lines.freight||[]).length) services.push(lang()==='en'?'Logistics, delivery and mobilization as required':'Logística, entrega y movilización según requerimiento');
@@ -1139,7 +1196,7 @@ window.PCP = window.PCP || {};
       + '<div style="margin-top:8px"><b>' + (lang()==='en'?'Included services & supply':'Servicios y suministro incluidos') + ':</b>' + servicesHtml + '</div>'
       + '<div class="smallprint" style="margin-top:6px">' + (lang()==='en'?'Note: materials and detailed internal quantities are managed by the contractor; this proposal presents a general, professional description of the project.':'Nota: los materiales y cantidades internas detalladas son gestionados por el contratista; esta propuesta presenta una descripción general y profesional del proyecto.') + '</div></div>'
 
-      + '<div class="print-section avoid-break"><h3>' + esc(t('equipmentBrands')) + '</h3>' + equipmentHtml + '</div>'
+      + (maintOnly ? '' : '<div class="print-section avoid-break"><h3>' + esc(t('equipmentBrands')) + '</h3>' + equipmentHtml + '</div>')
       + maintHtml
 
       + '<div class="print-grid avoid-break">'

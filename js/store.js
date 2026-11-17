@@ -55,6 +55,16 @@ window.PCP = window.PCP || {};
 
   var U = P.util;
 
+  function isMaintOnly(p) {
+    var sc = (p && p.scope) || [];
+    return sc.length > 0 && sc.every(function (x) { return x === 'maint'; });
+  }
+  function maintLabel(line) {
+    var l = line || {};
+    var brandModel = [String(l.brand || '').trim(), String(l.model || '').trim()].filter(Boolean).join(' ');
+    return brandModel || String(l.name || '').trim() || 'Equipo';
+  }
+
   /* ---------------------------------------------------------------- */
   /* Estado inicial                                                    */
   /* ---------------------------------------------------------------- */
@@ -157,6 +167,7 @@ window.PCP = window.PCP || {};
         else S.syncPayment(p);
         if (!p.maintenance) p.maintenance = { items: [], notes: '', contractMonths: 12, includeMaterials: true };
         if (!Array.isArray(p.maintenance.items)) p.maintenance.items = [];
+        if (!Array.isArray(p.maintenance.dismissed)) p.maintenance.dismissed = [];
       });
       return s;
     },
@@ -240,6 +251,77 @@ window.PCP = window.PCP || {};
 
     getProject: function (id) {
       return S.state.projects.filter(function (p) { return p.id === id; })[0] || null;
+    },
+
+    isMaintOnly: isMaintOnly,
+
+    /* Load the equipment quoted in the offer into the maintenance plan.
+       Quantities follow the quote; visit/price/material values stay as edited. */
+    syncMaintenance: function (p, opts) {
+      opts = opts || {};
+      if (!p || !p.scope || p.scope.indexOf('maint') < 0) return false;
+      p.maintenance = p.maintenance || { items: [], notes: '', contractMonths: 12, includeMaterials: true };
+      var m = p.maintenance;
+      if (!Array.isArray(m.items)) m.items = [];
+      if (!Array.isArray(m.dismissed)) m.dismissed = [];
+      if (opts.restoreDismissed) m.dismissed = [];
+
+      var eq = (p.lines && Array.isArray(p.lines.equipment)) ? p.lines.equipment : [];
+      var eqById = {};
+      eq.forEach(function (l) { if (l && l.id) eqById[l.id] = l; });
+      var changed = false;
+
+      // Remove automatic rows whose source equipment line no longer exists.
+      var kept = [];
+      m.items.forEach(function (it) {
+        if (it && it.sourceLineId && !eqById[it.sourceLineId]) { changed = true; return; }
+        kept.push(it);
+      });
+      m.items = kept;
+
+      var dismissed = m.dismissed.filter(function (id) { return !!eqById[id]; });
+      if (dismissed.length !== m.dismissed.length) { m.dismissed = dismissed; changed = true; }
+
+      var bySource = {};
+      m.items.forEach(function (it) { if (it && it.sourceLineId) bySource[it.sourceLineId] = it; });
+
+      eq.forEach(function (l) {
+        if (!l || !l.id || m.dismissed.indexOf(l.id) >= 0) return;
+        var label = maintLabel(l);
+        var qty = num(l.qty);
+        var it = bySource[l.id];
+        if (!it) {
+          m.items.push({
+            sourceLineId: l.id,
+            auto: true,
+            type: label,
+            sourceType: label,
+            qty: qty,
+            sourceQty: qty,
+            visits: 2,
+            pricePerVisit: 0,
+            materialsPerVisit: 0
+          });
+          changed = true;
+          return;
+        }
+        // Follow quote quantities unless the user changed the quantity in the plan.
+        var prevQty = it.sourceQty == null ? num(it.qty) : num(it.sourceQty);
+        if (num(it.qty) === prevQty && num(it.qty) !== qty) { it.qty = qty; changed = true; }
+        it.sourceQty = qty;
+        // Follow the equipment label unless the user renamed the maintenance line.
+        if (!it.type || it.type === it.sourceType) {
+          if (it.type !== label) { it.type = label; changed = true; }
+        }
+        it.sourceType = label;
+        if (it.auto !== true) { it.auto = true; changed = true; }
+      });
+
+      if (changed) {
+        p.updatedAt = new Date().toISOString();
+        if (opts.save !== false) S.save();
+      }
+      return changed;
     },
 
     updateProject: function (id, patch) {
@@ -496,7 +578,9 @@ window.PCP = window.PCP || {};
       function countStage(id) { return (p.lines[id] || []).length; }
 
       var sc = p.scope || [];
-      var isAC = sc.indexOf('ac') >= 0 || sc.indexOf('maint') >= 0;
+      var maintOnly = isMaintOnly(p);
+      var hasMaintScope = sc.indexOf('maint') >= 0;
+      var isAC = sc.indexOf('ac') >= 0;
       var isHeat = sc.indexOf('heat') >= 0;
       var isVent = sc.indexOf('vent') >= 0;
       var isRefrig = sc.indexOf('refrig') >= 0;
@@ -528,15 +612,19 @@ window.PCP = window.PCP || {};
       if (hasMaintScope) {
         var mItems = (p.maintenance && Array.isArray(p.maintenance.items)) ? p.maintenance.items : [];
         var mOk = mItems.some(function(m){ return U.num(m.qty) > 0 && U.num(m.visits) > 0 && (U.num(m.pricePerVisit) > 0 || U.num(m.materialsPerVisit) > 0); });
-        add('maintplan', 'Plan de mantenimiento definido', 8, mOk,
+        add('maintplan', 'Plan de mantenimiento definido', maintOnly ? 2 : 8, mOk,
           'El alcance incluye mantenimiento: define equipos/cantidad, visitas y precio/materiales por visita en la etapa de Mantenimiento.');
       }
 
       /* --- proveedores --- */
-      add('suppliers', 'Proveedores seleccionados', 2,
-        Array.isArray(p.selectedSuppliers) && p.selectedSuppliers.length > 0,
-        'Selecciona al menos un proveedor en la etapa de Proveedores para filtrar materiales y precios (puedes elegir varios para comparar).', 'warn');
+      if (!maintOnly) {
+        add('suppliers', 'Proveedores seleccionados', 2,
+          Array.isArray(p.selectedSuppliers) && p.selectedSuppliers.length > 0,
+          'Selecciona al menos un proveedor en la etapa de Proveedores para filtrar materiales y precios (puedes elegir varios para comparar).', 'warn');
+      }
 
+      /* --- equipos / instalación (no aplica a proyectos solo de mantenimiento) --- */
+      if (!maintOnly) {
       /* --- equipos --- */
       add('equipment', 'Equipo principal cargado', 3, countStage('equipment') > 0,
         'No hay equipos en la cotización.');
@@ -629,6 +717,8 @@ window.PCP = window.PCP || {};
       }
       add('labor', 'Mano de obra cargada', 7, countStage('labor') > 0,
         'No hay horas de instalación. Es la partida que más se olvida.');
+      }
+
       add('contingency', 'Contingencia ≥ 3%', 8, num(p.settings.contingencyPct) >= 3,
         'Contingencia en ' + num(p.settings.contingencyPct) + '%. Para obra, 3–8%.', 'warn');
 

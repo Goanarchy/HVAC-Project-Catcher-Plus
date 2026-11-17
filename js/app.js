@@ -44,6 +44,7 @@
       + '<div class="field col-6"><label>' + esc(t('clientName')) + ' *</label><input id="np-client" type="text" placeholder="' + esc(t('clientNamePh')) + '"></div>'
       + '<div class="field col-6"><label>' + esc(t('clientCompanyOpt')) + '</label><input id="np-company" type="text" placeholder="' + esc(t('clientCompanyPh')) + '"></div>'
       + '<div class="field col-6"><label>' + esc(t('clientType')) + '</label><select id="np-type">' + P.CLIENT_TYPES.map(function(ct){return '<option value="'+ct.id+'">'+P.util.esc(LClient(ct.id))+'</option>';}).join('') + '</select></div>'
+      + '<div class="col-12"><label class="check-tile maint-only-check"><input type="checkbox" id="np-maint-only"><div><div class="t">🛠️ ' + (lang()==='en'?'Maintenance-only project':'Proyecto solo de mantenimiento') + '</div><div class="d">' + (lang()==='en'?'Creates a simplified Scope → Maintenance → Summary flow. Equipment will load automatically if you quote it.':'Crea un flujo simplificado Alcance → Mantenimiento → Resumen. Los equipos se cargan automáticamente si los cotizas.') + '</div></div></label></div>'
       + '</div><div class="notice info">💡 ' + esc(t('projectClientHelp')) + '</div>';
     UI.openModal('✨ ' + t('newProject'), body,
       '<button class="btn" data-action="close-modal">' + esc(t('cancel')) + '</button><button class="btn primary" data-action="create-project">🚀 ' + esc(t('createProject')) + '</button>', { small: true });
@@ -162,6 +163,7 @@
     if (bind === 'scope') {
       var vals = $all('input[data-bind="scope"]:checked').map(function (x) { return x.value; });
       p.scope = vals;
+      if (S.syncMaintenance) S.syncMaintenance(p, { save: false });
     } else if (bind === 'selectedSuppliers') {
       var svals = $all('input[data-bind="selectedSuppliers"]:checked').map(function (x) { return x.value; });
       p.selectedSuppliers = svals;
@@ -257,13 +259,14 @@
         var cname = cnameEl ? cnameEl.value : '';
         var ccomp = ($('#np-company')||{}).value || '';
         var ctype = ($('#np-type')||{}).value || 'residential';
+        var maintOnlyNew = !!($('#np-maint-only')||{}).checked;
         if (!String(pname).trim() || !String(cname).trim()) {
           UI.toast(tr('Ingresa el nombre del proyecto y del cliente.','Enter the project name and client name.'), 'warn');
           if (pnameEl && !String(pname).trim()) { try { pnameEl.focus(); } catch(e){} }
           else if (cnameEl) { try { cnameEl.focus(); } catch(e){} }
           return;
         }
-        var np = S.newProject({ projectName: String(pname).trim(), clientName: String(cname).trim(), clientCompany: String(ccomp).trim() });
+        var np = S.newProject({ projectName: String(pname).trim(), clientName: String(cname).trim(), clientCompany: String(ccomp).trim(), scope: maintOnlyNew ? ['maint'] : ['ac'] });
         if (np && np.client) np.client.type = ctype;
         if (!np || !np.id) throw new Error('project_not_created');
         S.save();
@@ -298,16 +301,27 @@
       } else {
         S.addLine(pid, stage, data);
       }
+      var lp = S.getProject(pid);
+      if (lp && S.syncMaintenance) S.syncMaintenance(lp);
       UI.closeModal(); UI.toast(lid ? tr('Ítem actualizado','Item updated') : tr('Ítem agregado','Item added'), 'success'); rerender();
       return;
     }
     if (a === 'del-line') {
       if (!confirm(tr('¿Eliminar este ítem?','Delete this item?'))) return;
-      S.removeLine(currentProjectId(), btn.getAttribute('data-id')); rerender(); return;
+      var dpid = currentProjectId();
+      S.removeLine(dpid, btn.getAttribute('data-id'));
+      var dp = S.getProject(dpid);
+      if (dp && S.syncMaintenance) S.syncMaintenance(dp);
+      rerender(); return;
     }
     if (a === 'dup-line') {
       var f2 = S.getLine(currentProjectId(), btn.getAttribute('data-id'));
-      if (f2) { S.addLine(currentProjectId(), f2.stage, JSON.parse(JSON.stringify(f2.line))); rerender(); }
+      if (f2) {
+        S.addLine(currentProjectId(), f2.stage, JSON.parse(JSON.stringify(f2.line)));
+        var dupP = S.getProject(currentProjectId());
+        if (dupP && S.syncMaintenance) S.syncMaintenance(dupP);
+        rerender();
+      }
       return;
     }
 
@@ -320,6 +334,8 @@
       var pid2 = (window._pcpPick && window._pcpPick.pid) || currentProjectId();
       if (item && pid2) {
         S.addFromCatalog(pid2, stageId || item.cat, item, 1);
+        var catP = S.getProject(pid2);
+        if (catP && S.syncMaintenance) S.syncMaintenance(catP);
         UI.toast(tr('Agregado: ','Added: ') + item.name, 'success');
         rerender();
         if ($('#pick-table')) UI.refreshPicker();
@@ -403,6 +419,7 @@
     if (a === 'add-maint-item') {
       var pidm = btn.getAttribute('data-pid') || currentProjectId();
       var pm = S.getProject(pidm); if (!pm) return;
+      if (S.syncMaintenance) S.syncMaintenance(pm, { save: false });
       pm.maintenance = pm.maintenance || { items: [], notes: '', contractMonths: 12, includeMaterials: true };
       if (!Array.isArray(pm.maintenance.items)) pm.maintenance.items = [];
       pm.maintenance.items.push({ type: '', qty: 1, visits: 2, pricePerVisit: 0, materialsPerVisit: 0 });
@@ -412,7 +429,35 @@
     if (a === 'del-maint-item') {
       var pmd = S.getProject(currentProjectId()); if (!pmd || !pmd.maintenance || !Array.isArray(pmd.maintenance.items)) return;
       var mi = parseInt(btn.getAttribute('data-idx'), 10);
-      if (!isNaN(mi)) { pmd.maintenance.items.splice(mi, 1); pmd.updatedAt = new Date().toISOString(); S.save(); rerender(); }
+      if (!isNaN(mi)) {
+        var removed = pmd.maintenance.items[mi];
+        pmd.maintenance.items.splice(mi, 1);
+        // Remember intentionally removed quote lines so they are not auto-added again.
+        if (removed && removed.sourceLineId) {
+          pmd.maintenance.dismissed = Array.isArray(pmd.maintenance.dismissed) ? pmd.maintenance.dismissed : [];
+          if (pmd.maintenance.dismissed.indexOf(removed.sourceLineId) < 0) pmd.maintenance.dismissed.push(removed.sourceLineId);
+        }
+        pmd.updatedAt = new Date().toISOString(); S.save(); rerender();
+      }
+      return;
+    }
+    if (a === 'sync-maint') {
+      var pms = S.getProject(btn.getAttribute('data-pid') || currentProjectId());
+      if (pms) {
+        S.syncMaintenance(pms, { restoreDismissed: true });
+        UI.toast(tr('Equipos de la oferta sincronizados','Equipment synced from quote'), 'success');
+        rerender();
+      }
+      return;
+    }
+    if (a === 'maint-visits') {
+      var pmv = S.getProject(btn.getAttribute('data-pid') || currentProjectId());
+      var vis = parseInt(btn.getAttribute('data-visits'), 10);
+      if (pmv && pmv.maintenance && Array.isArray(pmv.maintenance.items) && !isNaN(vis)) {
+        pmv.maintenance.items.forEach(function (m) { m.visits = vis; });
+        pmv.updatedAt = new Date().toISOString();
+        S.save(); rerender();
+      }
       return;
     }
 
@@ -572,16 +617,33 @@
   function showLaunch() {
     if (window._pcpLaunched) return;
     window._pcpLaunched = true;
-    var body = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' + (I?I.logoSVG(56):'') + '<div><div style="font-weight:800;font-size:18px">' + esc(t('appName')) + ' <span class="version-badge">v' + esc(t('version')) + '</span></div><div class="muted">' + esc(t('tagline')) + '</div></div></div>'
-      + '<p class="muted">' + (lang()==='en'?'What would you like to do?':'¿Qué deseas hacer?') + '</p><div class="action-grid">'
+    var en = lang()==='en';
+    var chips = '<div class="launch-chips">'
+      + '<span>⚡ ' + (en?'Local-first & offline':'Local y sin conexión') + '</span>'
+      + '<span>🧾 ' + (en?'Professional PDF':'PDF profesional') + '</span>'
+      + '<span>🛠️ ' + (en?'Maintenance plans':'Planes de mantenimiento') + '</span>'
+      + '</div>';
+    var body = '<div class="launch-hero">'
+      + '<button class="launch-close" data-action="close-modal" title="' + esc(t('close')) + '">✕</button>'
+      + '<div class="launch-hero-inner">'
+      + '<div class="launch-logo">' + (I?I.logoSVG(92):'') + '</div>'
+      + '<div class="launch-copy"><div class="eyebrow">HVAC · New Jersey · v' + esc(t('version')) + '</div>'
+      + '<h2 class="launch-title">' + esc(t('appName')) + '</h2>'
+      + '<p class="launch-tagline">' + esc(t('tagline')) + '</p>'
+      + chips + '</div></div></div>'
+      + '<div class="launch-body">'
+      + '<div class="launch-welcome-line"><span class="launch-wave">👋</span><div><b>' + (en?'Welcome back':'Bienvenido de nuevo') + '</b><div class="muted small">' + (en?'What would you like to do today?':'¿Qué deseas hacer hoy?') + '</div></div></div>'
+      + '<div class="action-grid launch-grid">'
       + '<button class="action-card primary-card" data-action="open-new-project" style="text-align:left;cursor:pointer" onclick="document.getElementById(\'modal-backdrop\').classList.add(\'hidden\')"><div class="ic art-ic">✍️</div><div class="t">' + esc(t('createQuote')) + '</div><div class="d">' + esc(t('createQuoteDesc')) + '</div></button>'
       + launchBtn('#/projects','📋', t('viewQuotes'), t('viewQuotesDesc'))
       + launchBtn('#/catalog','🧰', t('verifyPrices'), t('verifyPricesDesc'))
       + launchBtn('#/deals','🏷️', t('dealsPromos'), t('dealsPromosDesc'))
       + launchBtn('#/suppliers','🏪', t('suppliersRfq'), t('suppliersRfqDesc'))
       + launchBtn('#/company','🏢', t('companyBackup'), t('companyBackupDesc'))
-      + '</div><div class="notice info" style="margin-top:12px">💡 ' + t('homePriceNote') + '</div>';
-    UI.openModal(t('welcome'), body, '<button class="btn primary" data-action="close-modal">🚀 ' + esc(t('start')) + '</button>');
+      + '</div>'
+      + '<div class="notice info" style="margin-top:14px">💡 ' + t('homePriceNote') + '</div>'
+      + '</div>';
+    UI.openModal('', body, '<button class="btn primary btn-next" data-action="close-modal">🚀 ' + esc(t('start')) + '</button>', { className: 'launch-modal' });
   }
   function launchBtn(href, ic, title, d) {
     return '<a class="action-card" href="' + href + '" onclick="document.getElementById(\'modal-backdrop\').classList.add(\'hidden\')"><div class="ic art-ic">' + ic + '</div><div class="t">' + esc(title) + '</div><div class="d">' + esc(d) + '</div></a>';

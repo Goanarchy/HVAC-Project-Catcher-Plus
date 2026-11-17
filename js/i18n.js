@@ -1,5 +1,5 @@
 /* =====================================================================
-   HVAC Project Catcher Plus 1.2 — I18N + Branding
+   HVAC Project Catcher Plus 1.3 — I18N + Branding
    ===================================================================== */
 window.PCP = window.PCP || {};
 (function (P) {
@@ -8,7 +8,7 @@ window.PCP = window.PCP || {};
   var STR = {
     es: {
       appName: 'HVAC Project Catcher Plus',
-      version: '1.2',
+      version: '1.3',
       tagline: 'Cotiza HVAC como un pro, sin olvidos',
       subtitle: 'HVAC · NJ',
       nav: { home: 'Inicio', projects: 'Presupuestos', catalog: 'Catálogo', deals: 'Ofertas', suppliers: 'Proveedores', company: 'Empresa' },
@@ -16,7 +16,7 @@ window.PCP = window.PCP || {};
       langEs: 'Español', langEn: 'English', switchToEn: 'English', switchToEs: 'Español',
       localData: 'Datos locales (este navegador)',
       noCompany: 'Sin empresa',
-      welcome: 'Bienvenido a HVAC Project Catcher Plus 1.2',
+      welcome: 'Bienvenido a HVAC Project Catcher Plus 1.3',
       start: 'Comenzar', cancel: 'Cancelar', save: 'Guardar', edit: 'Editar', delete: 'Borrar', duplicate: 'Duplicar', open: 'Abrir', add: 'Agregar', back: 'Volver', next: 'Siguiente', previous: 'Anterior', close: 'Cerrar', search: 'Buscar', all: 'Todas', allM: 'Todos', none: 'No', yes: 'Sí',
       createQuote: 'Crear presupuesto / oferta', viewQuotes: 'Ver ofertas / proyectos', verifyPrices: 'Verificar precios de materiales', dealsPromos: 'Ofertas y promociones', suppliersRfq: 'Proveedores y RFQ', companyBackup: 'Empresa y respaldo',
       createQuoteDesc: 'Nuevo proyecto por etapas con checklist de completitud.',
@@ -69,12 +69,12 @@ window.PCP = window.PCP || {};
       proposalOverview: 'Descripción general del proyecto',
       equipmentBrands: 'Equipos y marcas incluidos',
       noEquipmentListed: 'Equipos según alcance y especificaciones acordadas.',
-      generatedNote: 'Propuesta generada con HVAC Project Catcher Plus 1.2 a partir de la información del proyecto.',
+      generatedNote: 'Propuesta generada con HVAC Project Catcher Plus 1.3 a partir de la información del proyecto.',
       logoAlt: 'Logo HVAC Project Catcher Plus'
     },
     en: {
       appName: 'HVAC Project Catcher Plus',
-      version: '1.2',
+      version: '1.3',
       tagline: 'Quote HVAC like a pro, miss nothing',
       subtitle: 'HVAC · NJ',
       nav: { home: 'Home', projects: 'Quotes', catalog: 'Catalog', deals: 'Deals', suppliers: 'Suppliers', company: 'Company' },
@@ -82,7 +82,7 @@ window.PCP = window.PCP || {};
       langEs: 'Español', langEn: 'English', switchToEn: 'English', switchToEs: 'Español',
       localData: 'Local data (this browser)',
       noCompany: 'No company set',
-      welcome: 'Welcome to HVAC Project Catcher Plus 1.2',
+      welcome: 'Welcome to HVAC Project Catcher Plus 1.3',
       start: 'Start', cancel: 'Cancel', save: 'Save', edit: 'Edit', delete: 'Delete', duplicate: 'Duplicate', open: 'Open', add: 'Add', back: 'Back', next: 'Next', previous: 'Previous', close: 'Close', search: 'Search', all: 'All', allM: 'All', none: 'No', yes: 'Yes',
       createQuote: 'Create quote / proposal', viewQuotes: 'View quotes / projects', verifyPrices: 'Verify material prices', dealsPromos: 'Deals & promotions', suppliersRfq: 'Suppliers & RFQ', companyBackup: 'Company & backup',
       createQuoteDesc: 'New staged project with a completeness checklist.',
@@ -135,7 +135,7 @@ window.PCP = window.PCP || {};
       proposalOverview: 'Project overview',
       equipmentBrands: 'Included equipment & brands',
       noEquipmentListed: 'Equipment as per agreed scope and specifications.',
-      generatedNote: 'Proposal generated with HVAC Project Catcher Plus 1.2 based on project information.',
+      generatedNote: 'Proposal generated with HVAC Project Catcher Plus 1.3 based on project information.',
       logoAlt: 'HVAC Project Catcher Plus logo'
     }
   };
