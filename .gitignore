@@ -1,0 +1,31 @@
+# OS / file manager
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Node / build outputs (not required by this project, kept for tooling)
+node_modules/
+dist/
+standalone/
+_site/
+package-lock.json
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Local backups and generated files
+*.bak
+*.backup
+backups/
+*.zip
+*.log
