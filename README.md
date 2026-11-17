@@ -1,5 +1,6 @@
 # HVAC Project Catcher Plus 1.2
 
+[![Live Web App](https://img.shields.io/badge/Live%20Web%20App-Open%20App-0F2C59?style=for-the-badge)](https://goanarchy.github.io/HVAC-Project-Catcher-Plus/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Vanilla JS](https://img.shields.io/badge/Vanilla%20JS-ES2020-F7DF1E?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![No Build Step](https://img.shields.io/badge/Build-None-10B981)](#inicio-rápido)
@@ -9,6 +10,8 @@
 
 > **Local-first HVAC quoting and proposal builder for New Jersey contractors.**
 > Presupuestos HVAC por etapas, comparación de proveedores, control de materiales, checklist de completitud y propuesta PDF para el cliente. Funciona sin instalación, sin servidor y sin cuenta en la nube.
+
+**Demo en vivo / Live demo:** https://goanarchy.github.io/HVAC-Project-Catcher-Plus/
 
 **HVAC Project Catcher Plus 1.2** es una aplicación web local (HTML/CSS/JS vanilla, sin build) para pequeñas empresas HVAC en **New Jersey**. Ayuda a crear cotizaciones y propuestas profesionales por etapas, evitar olvidos con un checklist, comparar proveedores, generar PDF para el cliente y listas/RFQ para proveedores.
 
